@@ -7,9 +7,9 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8002:8000"  # v1 development port (external:internal)
+      - "8003:8000"  # v1 development port (external:internal) - using 8003 as 8002 is used by claudine-notes
     environment:
-      - DATABASE_URL=postgresql://claudine:claudine@host.docker.internal:5432/claudine_v1
+      - DATABASE_URL=postgresql://claudine:claudine_dev_password@claudine-postgres:5432/claudine_v1
       - DEBUG=true
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
     volumes:
@@ -18,30 +18,30 @@ services:
       - db-setup
     restart: unless-stopped
     networks:
-      - claudine-network
+      - server_claudine_network
 
   # Database setup service - runs once to create claudine_v1 database
   db-setup:
     image: postgres:15
     environment:
-      - PGPASSWORD=claudine
+      - PGPASSWORD=claudine_dev_password
     entrypoint: >
       /bin/sh -c "
       echo 'Waiting for PostgreSQL...';
-      until pg_isready -h host.docker.internal -U claudine; do
+      until pg_isready -h claudine-postgres -U claudine; do
         sleep 1;
       done;
       echo 'PostgreSQL ready, checking/creating claudine_v1 database...';
-      psql -h host.docker.internal -U claudine -tc \"SELECT 1 FROM pg_database WHERE datname = 'claudine_v1'\" | grep -q 1 ||
-      psql -h host.docker.internal -U claudine -c 'CREATE DATABASE claudine_v1';
+      psql -h claudine-postgres -U claudine -tc \"SELECT 1 FROM pg_database WHERE datname = 'claudine_v1'\" | grep -q 1 ||
+      psql -h claudine-postgres -U claudine -c 'CREATE DATABASE claudine_v1';
       echo 'Database claudine_v1 ready!';
       "
     networks:
-      - claudine-network
+      - server_claudine_network
 
 networks:
-  claudine-network:
-    driver: bridge
+  server_claudine_network:
+    external: true
 
 # Notes:
 # - Uses existing claudine-postgres container on host (port 5432)
