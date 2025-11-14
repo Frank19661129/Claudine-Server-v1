@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "Claudine Server v1"
-    APP_VERSION: str = "0.1"
+    APP_VERSION: str = "0.2"
     DEBUG: bool = False
 
     # API
