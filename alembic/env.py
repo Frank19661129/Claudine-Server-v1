@@ -15,6 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.core.config import settings
 from app.infrastructure.database.session import Base
 
+# Import all models here for autogenerate support
+from app.infrastructure.database.models import UserModel  # noqa: F401
+
 # Alembic Config object
 config = context.config
 
