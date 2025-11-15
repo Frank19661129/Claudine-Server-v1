@@ -5,7 +5,7 @@ Clean Architecture implementation with FastAPI
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.presentation.routers import health, auth, calendar, conversation, monitor, persons, tasks, notes
+from app.presentation.routers import health, auth, calendar, conversation, monitor, persons, tasks, notes, inbox
 import time
 
 # Initialize FastAPI application
@@ -109,6 +109,7 @@ app.include_router(conversation.router, prefix=settings.API_V1_PREFIX)
 app.include_router(persons.router, prefix=settings.API_V1_PREFIX)
 app.include_router(tasks.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notes.router, prefix=settings.API_V1_PREFIX)
+app.include_router(inbox.router, prefix=settings.API_V1_PREFIX)
 app.include_router(monitor.router, prefix=settings.API_V1_PREFIX)
 
 
