@@ -5,6 +5,7 @@ Part of Infrastructure layer.
 from typing import Optional, List
 from uuid import UUID
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy import desc, or_, and_
 
 from app.infrastructure.database.models import NoteModel, NoteGroupModel, NoteItemModel
@@ -118,6 +119,7 @@ class NoteRepository:
         is_pinned: bool = False,
         is_checklist: bool = False,
         group_id: Optional[UUID] = None,
+        categories: Optional[List[str]] = None,
     ) -> NoteModel:
         """Create a new note."""
         note = NoteModel(
@@ -128,6 +130,7 @@ class NoteRepository:
             color=color,
             is_pinned=is_pinned,
             is_checklist=is_checklist,
+            categories=categories or [],
         )
 
         self.db.add(note)

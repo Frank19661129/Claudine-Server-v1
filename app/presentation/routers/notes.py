@@ -95,6 +95,7 @@ class NoteCreateRequest(BaseModel):
     is_checklist: bool = False
     group_id: Optional[str] = None
     items: Optional[List[NoteItemData]] = []
+    categories: Optional[List[str]] = []
 
 
 class NoteUpdateRequest(BaseModel):
@@ -104,6 +105,7 @@ class NoteUpdateRequest(BaseModel):
     color: Optional[str] = Field(None, pattern="^(yellow|blue|red|green|purple|orange|pink|gray|white)$")
     is_pinned: Optional[bool] = None
     group_id: Optional[str] = None
+    categories: Optional[List[str]] = None
 
 
 class NoteResponse(BaseModel):
@@ -120,6 +122,7 @@ class NoteResponse(BaseModel):
     updated_at: str
     deleted_at: Optional[str]
     items: List[NoteItemResponse]
+    categories: List[str] = []
 
 
 class NoteListResponse(BaseModel):
@@ -293,6 +296,7 @@ def create_note(
             is_checklist=request.is_checklist,
             group_id=UUID(request.group_id) if request.group_id else None,
             items=items_data,
+            categories=request.categories,
         )
         return note
     except ValueError as e:
@@ -382,6 +386,7 @@ def update_note(
             color=request.color,
             is_pinned=request.is_pinned,
             group_id=UUID(request.group_id) if request.group_id else None,
+            categories=request.categories,
         )
         if not note:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")

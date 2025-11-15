@@ -128,6 +128,7 @@ class NoteUseCases:
         is_checklist: bool = False,
         group_id: Optional[UUID] = None,
         items: Optional[List[dict]] = None,
+        categories: Optional[List[str]] = None,
     ) -> dict:
         """Create a new note."""
         # Convert item dicts to NoteItem entities if checklist
@@ -151,6 +152,7 @@ class NoteUseCases:
             is_checklist=is_checklist,
             group_id=group_id,
             items=item_entities,
+            categories=categories,
         )
 
         # Create in database
@@ -162,6 +164,7 @@ class NoteUseCases:
             is_pinned=note_entity.is_pinned,
             is_checklist=note_entity.is_checklist,
             group_id=note_entity.group_id,
+            categories=note_entity.categories,
         )
 
         # Add items if checklist
@@ -229,6 +232,7 @@ class NoteUseCases:
         color: Optional[str] = None,
         is_pinned: Optional[bool] = None,
         group_id: Optional[UUID] = None,
+        categories: Optional[List[str]] = None,
     ) -> Optional[dict]:
         """Update a note."""
         # Get existing note
@@ -257,6 +261,9 @@ class NoteUseCases:
 
         if group_id is not None:
             updates['group_id'] = group_id
+
+        if categories is not None:
+            updates['categories'] = categories
 
         if updates:
             updated_model = self.note_repo.update_note(note_id, user_id, **updates)
@@ -392,6 +399,7 @@ class NoteUseCases:
             "color": model.color,
             "is_pinned": model.is_pinned,
             "is_checklist": model.is_checklist,
+            "categories": model.categories or [],
             "created_at": model.created_at.isoformat(),
             "updated_at": model.updated_at.isoformat(),
             "deleted_at": model.deleted_at.isoformat() if model.deleted_at else None,

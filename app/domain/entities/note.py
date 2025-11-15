@@ -73,6 +73,7 @@ class Note:
     is_pinned: bool
     is_checklist: bool
     items: List[NoteItem] = field(default_factory=list)
+    categories: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
     deleted_at: Optional[datetime] = None
@@ -91,6 +92,7 @@ class Note:
         is_checklist: bool = False,
         group_id: Optional[UUID] = None,
         items: Optional[List[NoteItem]] = None,
+        categories: Optional[List[str]] = None,
     ) -> "Note":
         """
         Factory method to create a new note.
@@ -124,6 +126,7 @@ class Note:
             is_pinned=is_pinned,
             is_checklist=is_checklist,
             items=items or [],
+            categories=categories or [],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
             deleted_at=None,

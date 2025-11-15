@@ -226,6 +226,7 @@ class NoteModel(Base):
     color = Column(String(20), default="yellow", nullable=False)
     is_pinned = Column(Boolean, default=False, nullable=False)
     is_checklist = Column(Boolean, default=False, nullable=False)
+    categories = Column(ARRAY(String), nullable=True, default=[])
     search_vector = Column(TSVECTOR, nullable=True)  # For full-text search
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
