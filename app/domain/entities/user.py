@@ -23,6 +23,7 @@ class User:
     created_at: datetime
     updated_at: datetime
     hashed_password: Optional[str] = None
+    photo_url: Optional[str] = None
 
     @classmethod
     def create(
@@ -74,10 +75,12 @@ class User:
         self.is_active = True
         self.updated_at = datetime.utcnow()
 
-    def update_profile(self, full_name: Optional[str] = None) -> None:
+    def update_profile(self, full_name: Optional[str] = None, photo_url: Optional[str] = None) -> None:
         """Update user profile information."""
         if full_name:
             self.full_name = full_name.strip()
+        if photo_url is not None:
+            self.photo_url = photo_url
         self.updated_at = datetime.utcnow()
 
     def is_oauth_user(self) -> bool:

@@ -23,6 +23,7 @@ class UserModel(Base):
     full_name = Column(String(255), nullable=False)
     provider = Column(String(50), nullable=False)  # google, microsoft, local
     hashed_password = Column(String(255), nullable=True)  # Only for local users
+    photo_url = Column(Text, nullable=True)  # Profile photo URL (base64 data URL)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

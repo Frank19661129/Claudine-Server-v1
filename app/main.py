@@ -17,13 +17,18 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configure CORS
+# Configure CORS - Secure configuration for development/production
+# Allows:
+# - localhost with any port (development)
+# - 127.0.0.1 with any port (development)
+# - Tailscale IPs (100.x.x.x) with any port (remote access)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origin_regex=r"^(http://localhost:\d+|http://127\.0\.0\.1:\d+|https?://100\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?)$",
+    allow_credentials=False,  # We use JWT tokens in headers, not cookies
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -34,12 +39,13 @@ async def monitor_requests(request: Request, call_next):
     start_time = time.time()
 
     # Skip health check and monitor endpoints to avoid noise
-    skip_paths = ["/api/v1/health", "/api/v1/monitor/transactions"]
+    skip_paths = ["/api/v1/health", "/api/v1/monitor/transactions", "/api/v1/auth/upload-photo"]
     should_log = request.url.path not in skip_paths
 
-    # Capture request body
+    # Capture request body (skip multipart/form-data for file uploads)
     request_body = None
-    if should_log and request.method in ["POST", "PUT", "PATCH"]:
+    content_type = request.headers.get("content-type", "")
+    if should_log and request.method in ["POST", "PUT", "PATCH"] and "multipart/form-data" not in content_type:
         try:
             import json
             from starlette.datastructures import Headers

@@ -2,7 +2,7 @@
 Authentication router.
 Part of Presentation layer - API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_db, get_user_repository, get_current_user, oauth2_scheme
@@ -19,6 +19,8 @@ from app.presentation.schemas.auth import (
     UserResponse,
 )
 from app.infrastructure.services.jwt import extract_user_id_from_token
+import base64
+from typing import Optional
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -122,3 +124,79 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     Requires valid JWT token in Authorization header.
     """
     return current_user
+
+
+@router.post("/test-upload-simple")
+async def test_upload_simple(file: UploadFile = File(...)):
+    """Super simple test endpoint"""
+    return {"status": "ok", "filename": file.filename}
+
+
+@router.post("/upload-photo", response_model=UserResponse)
+async def upload_photo(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repository),
+):
+    """
+    Upload profile photo for current user.
+
+    - **file**: Image file (JPEG, PNG, GIF, WebP)
+
+    Returns updated user info with photo_url as base64 data URL.
+    """
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: JPEG, PNG, GIF, WebP",
+        )
+
+    # Read file content
+    try:
+        file_content = await file.read()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to read file: {str(e)}",
+        )
+
+    # Validate file size (max 5MB)
+    max_size = 5 * 1024 * 1024  # 5MB
+    if len(file_content) > max_size:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size is 5MB",
+        )
+
+    # Convert to base64 data URL
+    file_b64 = base64.b64encode(file_content).decode('utf-8')
+    data_url = f"data:{file.content_type};base64,{file_b64}"
+
+    # Get current user entity from database
+    # current_user is a dict returned from GetCurrentUserUseCase
+    user_id = current_user["id"]
+    user = user_repo.get_by_id(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Update user profile with photo URL
+    user.update_profile(photo_url=data_url)
+
+    # Save to database
+    updated_user = user_repo.update(user)
+
+    # Convert to response schema
+    return UserResponse(
+        id=str(updated_user.id),
+        email=updated_user.email,
+        full_name=updated_user.full_name,
+        provider=updated_user.provider,
+        is_active=updated_user.is_active,
+        photo_url=updated_user.photo_url,
+    )

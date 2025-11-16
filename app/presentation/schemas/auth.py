@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     full_name: str
     provider: str
     is_active: bool
+    photo_url: str | None = None
 
 
 class AuthResponse(BaseModel):

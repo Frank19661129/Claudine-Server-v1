@@ -38,6 +38,7 @@ class UserRepository:
             full_name=user.full_name,
             provider=user.provider,
             hashed_password=user.hashed_password,
+            photo_url=user.photo_url,
             is_active=user.is_active,
             created_at=user.created_at,
             updated_at=user.updated_at,
@@ -98,6 +99,7 @@ class UserRepository:
 
         db_user.email = user.email
         db_user.full_name = user.full_name
+        db_user.photo_url = user.photo_url
         db_user.is_active = user.is_active
         db_user.updated_at = user.updated_at
 
@@ -157,6 +159,7 @@ class UserRepository:
             full_name=db_user.full_name,
             provider=db_user.provider,
             hashed_password=db_user.hashed_password,
+            photo_url=db_user.photo_url,
             is_active=db_user.is_active,
             created_at=db_user.created_at,
             updated_at=db_user.updated_at,
