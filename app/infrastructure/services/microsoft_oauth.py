@@ -144,7 +144,7 @@ class MicrosoftOAuthService:
                 url,
                 data={
                     "client_id": self.client_id,
-                    "client_secret": self.client_secret,
+                    # Note: device flow is a public client - do NOT send client_secret
                     "refresh_token": refresh_token,
                     "grant_type": "refresh_token",
                     "scope": " ".join(self.SCOPES),
