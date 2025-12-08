@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
-  claudine-server-v1:
-    container_name: claudine-server-v1
+  claudine-server:
+    container_name: claudine-server
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8003:8000"  # v1 development port (external:internal) - using 8003 as 8002 is used by claudine-notes
+      - "8003:8000"  # Main server port (external:internal)
     env_file:
       - .env
     environment:
@@ -20,7 +18,8 @@ services:
       - db-setup
     restart: unless-stopped
     networks:
-      - server_claudine_network
+      - postgres_network
+      - mcp_network
 
   # Database setup service - runs once to create claudine_v1 database
   db-setup:
@@ -39,14 +38,19 @@ services:
       echo 'Database claudine_v1 ready!';
       "
     networks:
-      - server_claudine_network
+      - postgres_network
 
 networks:
-  server_claudine_network:
+  postgres_network:
+    name: server-v0_claudine_network
+    external: true
+  mcp_network:
+    name: claudine_claudine-mcp-network
     external: true
 
 # Notes:
-# - Uses existing claudine-postgres container on host (port 5432)
+# - Uses existing claudine-postgres container from server-v0
 # - Creates claudine_v1 database if it doesn't exist
-# - Port 8002 for v1 development (v0 uses 8001)
+# - Port 8003 for main server
 # - Hot-reload enabled via volume mount for development
+# - Connected to MCP network for communication with MCP servers
