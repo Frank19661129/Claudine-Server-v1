@@ -105,8 +105,8 @@ async def execute_mcp_tool(
         settings = settings_repo.get_settings(current_user["id"])
         primary_provider = settings.primary_calendar_provider if settings else "microsoft"
 
-        # Create distributor with user's primary provider
-        distributor = MCPDistributor(primary_provider=primary_provider)
+        # Create distributor with user's primary provider and database session
+        distributor = MCPDistributor(primary_provider=primary_provider, db=db)
 
         # Map input source string to enum
         source_map = {
@@ -117,7 +117,7 @@ async def execute_mcp_tool(
         }
         input_source = source_map.get(request.input_source, InputSource.API)
 
-        # Execute via distributor
+        # Execute via distributor (db passed for internal tools like tasks, notes, etc.)
         result = await distributor.route_and_execute(
             tool_name=request.tool_name,
             tool_params=request.tool_params,
@@ -126,6 +126,7 @@ async def execute_mcp_tool(
             original_input=request.original_input or "",
             provider=request.provider,
             test_mode=request.test_mode,
+            db=db,
         )
 
         return MCPExecuteResponse(
@@ -160,13 +161,14 @@ async def confirm_mcp_execution(
         settings = settings_repo.get_settings(current_user["id"])
         primary_provider = settings.primary_calendar_provider if settings else "microsoft"
 
-        distributor = MCPDistributor(primary_provider=primary_provider)
+        distributor = MCPDistributor(primary_provider=primary_provider, db=db)
 
         result = await distributor.confirm_and_execute(
             tool_name=request.tool_name,
             tool_params=request.tool_params,
             user_id=str(current_user["id"]),
             provider=request.provider,
+            db=db,
         )
 
         return MCPExecuteResponse(
@@ -232,7 +234,7 @@ async def list_available_tools(
         settings = settings_repo.get_settings(current_user["id"])
         primary_provider = settings.primary_calendar_provider if settings else "microsoft"
 
-        distributor = MCPDistributor(primary_provider=primary_provider)
+        distributor = MCPDistributor(primary_provider=primary_provider, db=db)
         tools = await distributor.get_available_tools(provider)
 
         return {

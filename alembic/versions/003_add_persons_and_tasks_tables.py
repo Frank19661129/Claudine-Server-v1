@@ -19,6 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Create task_number sequence
+    op.execute("CREATE SEQUENCE IF NOT EXISTS task_number_seq")
+
     # Create persons table
     op.create_table(
         'persons',

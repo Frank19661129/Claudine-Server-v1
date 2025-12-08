@@ -2,6 +2,8 @@
 MCP Distributor - Central router for all MCP tool calls.
 
 Routes requests to appropriate MCP servers (Google, Microsoft, etc.)
+AND internal handlers (Tasks, Notes, Inbox, Persons).
+
 Provides unified interface regardless of input source (command, chat, voice).
 
 Supports test modes:
@@ -12,10 +14,11 @@ Supports test modes:
 import httpx
 import logging
 from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
 import uuid
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +33,14 @@ class InputSource(Enum):
 
 class MCPProvider(Enum):
     """Available MCP providers"""
+    # External providers (separate Docker containers)
     GOOGLE = "google"
     MICROSOFT = "microsoft"
-    # Future: TASKS = "tasks", NOTES = "notes", etc.
+    # Internal providers (handled by InternalMCPHandler)
+    INTERNAL_TASKS = "internal_tasks"
+    INTERNAL_NOTES = "internal_notes"
+    INTERNAL_INBOX = "internal_inbox"
+    INTERNAL_PERSONS = "internal_persons"
 
 
 @dataclass
@@ -97,26 +105,55 @@ class MCPDistributor:
 
     All paths lead to Rome (MCP):
     - #calendar command → MCPDistributor → Google/Microsoft MCP
+    - #task command → MCPDistributor → Internal Tasks handler
     - Chat about appointments → MCPDistributor → Google/Microsoft MCP
-    - Voice command → MCPDistributor → Google/Microsoft MCP
+    - Chat about tasks → MCPDistributor → Internal Tasks handler
+    - Voice command → MCPDistributor → appropriate handler
     """
 
-    # MCP Server endpoints
+    # External MCP Server endpoints
     # Using Docker container names on claudine-mcp-network
-    # Internal ports: both use 8001/8002 inside containers
     MCP_SERVERS = {
         MCPProvider.GOOGLE: "http://claudine-claudine-google-office-1:8002",
         MCPProvider.MICROSOFT: "http://claudine-claudine-microsoft-office-1:8001",
     }
 
-    def __init__(self, primary_provider: Optional[str] = None):
+    # Internal providers don't need URLs - they use direct handlers
+    INTERNAL_PROVIDERS = {
+        MCPProvider.INTERNAL_TASKS,
+        MCPProvider.INTERNAL_NOTES,
+        MCPProvider.INTERNAL_INBOX,
+        MCPProvider.INTERNAL_PERSONS,
+    }
+
+    def __init__(self, primary_provider: Optional[str] = None, db: Optional[Session] = None):
         """
         Initialize distributor.
 
         Args:
-            primary_provider: Default provider when none specified (google/microsoft)
+            primary_provider: Default provider for calendar (google/microsoft)
+            db: Database session for internal handlers
         """
         self.primary_provider = primary_provider or "microsoft"
+        self.db = db
+        self._internal_handler = None
+
+    def _get_internal_handler(self):
+        """Lazy-load internal handler with database session."""
+        if self._internal_handler is None and self.db is not None:
+            from app.infrastructure.services.internal_mcp_handler import InternalMCPHandler
+            self._internal_handler = InternalMCPHandler(self.db)
+        return self._internal_handler
+
+    def _is_internal_tool(self, tool_name: str) -> bool:
+        """Check if a tool is handled internally."""
+        from app.infrastructure.services.internal_mcp_handler import InternalMCPHandler
+        return InternalMCPHandler.get_tool_provider(tool_name) is not None
+
+    def _get_internal_provider(self, tool_name: str) -> Optional[str]:
+        """Get the internal provider for a tool."""
+        from app.infrastructure.services.internal_mcp_handler import InternalMCPHandler
+        return InternalMCPHandler.get_tool_provider(tool_name)
 
     async def route_and_execute(
         self,
@@ -126,23 +163,29 @@ class MCPDistributor:
         input_source: InputSource = InputSource.CHAT,
         original_input: str = "",
         provider: Optional[str] = None,
-        test_mode: Optional[int] = None,  # If None, read from context
+        test_mode: Optional[int] = None,
+        db: Optional[Session] = None,
     ) -> MCPExecutionResult:
         """
-        Route tool call to appropriate MCP and execute.
+        Route tool call to appropriate handler and execute.
 
         Args:
-            tool_name: Name of the tool to execute (e.g., "create_calendar_event")
+            tool_name: Name of the tool to execute
             tool_params: Parameters for the tool
             user_id: User ID for authentication
             input_source: How the request originated
             original_input: Original user input for logging
-            provider: Explicit provider (google/microsoft) or None for auto
-            test_mode: 0=normal, 1=log+execute, 2=log+confirm+execute
+            provider: Explicit provider or None for auto
+            test_mode: 0=normal, 1=log only, 2=log+confirm
+            db: Database session for internal tools
 
         Returns:
             MCPExecutionResult with data or error, plus route trace
         """
+        # Use provided db or fall back to instance db
+        if db is not None:
+            self.db = db
+
         # Get test_mode from context if not explicitly provided
         from app.core.test_mode_context import get_test_mode
         if test_mode is None:
@@ -151,9 +194,9 @@ class MCPDistributor:
         request_id = str(uuid.uuid4())[:8]
         timestamp = datetime.now().isoformat()
 
-        # Determine which MCP to use
-        selected_provider = self._determine_provider(provider, tool_params)
-        mcp_provider = MCPProvider(selected_provider)
+        # Determine which provider to use
+        selected_provider = self._determine_provider(tool_name, provider, tool_params)
+        is_internal = selected_provider.startswith("internal_")
 
         # Detect intent from tool name
         detected_intent = self._detect_intent(tool_name)
@@ -173,7 +216,8 @@ class MCPDistributor:
         )
 
         # Log the route
-        logger.info(f"[{request_id}] ROUTE: {input_source.value} → {detected_intent} → {selected_provider}:{tool_name}")
+        handler_type = "INTERNAL" if is_internal else "EXTERNAL"
+        logger.info(f"[{request_id}] ROUTE ({handler_type}): {input_source.value} → {detected_intent} → {selected_provider}:{tool_name}")
 
         # Test mode 1: Log only, NO execution
         if test_mode == 1:
@@ -201,15 +245,24 @@ class MCPDistributor:
                 requires_confirmation=True,
             )
 
-        # Test mode 0: Execute the tool via MCP
+        # Execute the tool
         try:
-            result = await self._execute_mcp_tool(
-                mcp_provider=mcp_provider,
-                tool_name=tool_name,
-                tool_params=tool_params,
-                user_id=user_id,
-                request_id=request_id,
-            )
+            if is_internal:
+                result = await self._execute_internal_tool(
+                    tool_name=tool_name,
+                    tool_params=tool_params,
+                    user_id=user_id,
+                    request_id=request_id,
+                )
+            else:
+                mcp_provider = MCPProvider(selected_provider)
+                result = await self._execute_external_mcp_tool(
+                    mcp_provider=mcp_provider,
+                    tool_name=tool_name,
+                    tool_params=tool_params,
+                    user_id=user_id,
+                    request_id=request_id,
+                )
 
             return MCPExecutionResult(
                 success=result.get("success", False),
@@ -232,6 +285,7 @@ class MCPDistributor:
         tool_params: Dict[str, Any],
         user_id: str,
         provider: Optional[str] = None,
+        db: Optional[Session] = None,
     ) -> MCPExecutionResult:
         """
         Execute after user confirmation (for test_mode=2).
@@ -241,22 +295,35 @@ class MCPDistributor:
             tool_params: Parameters for the tool
             user_id: User ID
             provider: Provider to use
+            db: Database session for internal tools
 
         Returns:
             MCPExecutionResult with execution result
         """
-        selected_provider = self._determine_provider(provider, tool_params)
-        mcp_provider = MCPProvider(selected_provider)
+        if db is not None:
+            self.db = db
+
+        selected_provider = self._determine_provider(tool_name, provider, tool_params)
+        is_internal = selected_provider.startswith("internal_")
         request_id = str(uuid.uuid4())[:8]
 
         try:
-            result = await self._execute_mcp_tool(
-                mcp_provider=mcp_provider,
-                tool_name=tool_name,
-                tool_params=tool_params,
-                user_id=user_id,
-                request_id=request_id,
-            )
+            if is_internal:
+                result = await self._execute_internal_tool(
+                    tool_name=tool_name,
+                    tool_params=tool_params,
+                    user_id=user_id,
+                    request_id=request_id,
+                )
+            else:
+                mcp_provider = MCPProvider(selected_provider)
+                result = await self._execute_external_mcp_tool(
+                    mcp_provider=mcp_provider,
+                    tool_name=tool_name,
+                    tool_params=tool_params,
+                    user_id=user_id,
+                    request_id=request_id,
+                )
 
             return MCPExecutionResult(
                 success=result.get("success", False),
@@ -271,15 +338,27 @@ class MCPDistributor:
                 error=str(e),
             )
 
-    def _determine_provider(self, explicit_provider: Optional[str], tool_params: Dict[str, Any]) -> str:
+    def _determine_provider(
+        self,
+        tool_name: str,
+        explicit_provider: Optional[str],
+        tool_params: Dict[str, Any]
+    ) -> str:
         """
-        Determine which provider to use.
+        Determine which provider to use for a tool.
 
         Priority:
-        1. Explicit provider parameter
-        2. Provider in tool_params
-        3. Primary/default provider
+        1. Check if tool is internal (tasks, notes, inbox, persons)
+        2. Explicit provider parameter
+        3. Provider in tool_params
+        4. Primary/default provider (for calendar tools)
         """
+        # First check if it's an internal tool
+        internal_provider = self._get_internal_provider(tool_name)
+        if internal_provider:
+            return internal_provider
+
+        # For external tools, check explicit provider
         if explicit_provider:
             return explicit_provider
 
@@ -291,19 +370,60 @@ class MCPDistributor:
     def _detect_intent(self, tool_name: str) -> str:
         """Detect intent category from tool name."""
         intent_map = {
+            # Calendar intents
             "create_calendar_event": "calendar:create",
             "list_calendar_events": "calendar:list",
             "create_reminder": "calendar:reminder",
             "update_calendar_event": "calendar:update",
             "delete_calendar_event": "calendar:delete",
-            # Future intents
+            # Task intents
             "create_task": "task:create",
             "list_tasks": "task:list",
+            "complete_task": "task:complete",
+            "update_task": "task:update",
+            "delete_task": "task:delete",
+            # Note intents
             "create_note": "note:create",
+            "list_notes": "note:list",
+            "update_note": "note:update",
+            "delete_note": "note:delete",
+            # Person intents
+            "create_person": "person:create",
+            "list_persons": "person:list",
+            # Inbox intents
+            "list_inbox": "inbox:list",
         }
         return intent_map.get(tool_name, f"unknown:{tool_name}")
 
-    async def _execute_mcp_tool(
+    async def _execute_internal_tool(
+        self,
+        tool_name: str,
+        tool_params: Dict[str, Any],
+        user_id: str,
+        request_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Execute an internal tool via InternalMCPHandler.
+
+        Args:
+            tool_name: Tool to execute
+            tool_params: Tool parameters
+            user_id: User ID
+            request_id: Request ID for logging
+
+        Returns:
+            Result from internal handler
+        """
+        handler = self._get_internal_handler()
+        if handler is None:
+            raise Exception("No database session available for internal tools")
+
+        logger.info(f"[{request_id}] Executing internal tool: {tool_name}")
+        result = await handler.execute(tool_name, tool_params, user_id)
+        logger.info(f"[{request_id}] Internal result: success={result.get('success')}")
+        return result
+
+    async def _execute_external_mcp_tool(
         self,
         mcp_provider: MCPProvider,
         tool_name: str,
@@ -312,7 +432,7 @@ class MCPDistributor:
         request_id: str,
     ) -> Dict[str, Any]:
         """
-        Execute tool on the appropriate MCP server.
+        Execute tool on an external MCP server.
 
         Args:
             mcp_provider: Which MCP server to call
@@ -334,7 +454,7 @@ class MCPDistributor:
             "request_id": request_id,
         }
 
-        logger.info(f"[{request_id}] Calling MCP: {execute_url}")
+        logger.info(f"[{request_id}] Calling external MCP: {execute_url}")
         logger.debug(f"[{request_id}] Payload: {payload}")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -344,25 +464,43 @@ class MCPDistributor:
                 raise Exception(f"MCP returned {response.status_code}: {response.text}")
 
             result = response.json()
-            logger.info(f"[{request_id}] MCP response: success={result.get('success')}")
+            logger.info(f"[{request_id}] External MCP response: success={result.get('success')}")
 
             return result
 
     async def get_available_tools(self, provider: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Get available tools from MCP servers.
+        Get available tools from all sources.
 
         Args:
             provider: Specific provider or None for all
 
         Returns:
-            List of tool definitions
+            List of tool definitions from external MCP servers + internal handlers
         """
         tools = []
 
-        providers = [MCPProvider(provider)] if provider else list(MCPProvider)
+        # Get internal tools
+        if provider is None or provider.startswith("internal"):
+            from app.infrastructure.services.internal_mcp_handler import InternalMCPHandler
+            internal_tools = InternalMCPHandler.get_all_tools()
+            if provider:
+                # Filter to specific internal provider
+                tools.extend([t for t in internal_tools if t.get("provider") == provider])
+            else:
+                tools.extend(internal_tools)
 
-        for mcp_provider in providers:
+        # Get external tools
+        external_providers = [MCPProvider.GOOGLE, MCPProvider.MICROSOFT]
+        if provider and not provider.startswith("internal"):
+            try:
+                external_providers = [MCPProvider(provider)]
+            except ValueError:
+                pass
+
+        for mcp_provider in external_providers:
+            if mcp_provider in self.INTERNAL_PROVIDERS:
+                continue
             try:
                 mcp_url = self.MCP_SERVERS[mcp_provider]
                 async with httpx.AsyncClient(timeout=10.0) as client:

@@ -1,7 +1,7 @@
 """Add inbox items table
 
 Revision ID: 006
-Revises: 005
+Revises: 004
 Create Date: 2025-11-15 21:30:00.000000
 
 """
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '006'
-down_revision = '005'
+down_revision = '004'
 branch_labels = None
 depends_on = None
 

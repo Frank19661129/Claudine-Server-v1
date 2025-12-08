@@ -46,6 +46,7 @@ def upgrade() -> None:
         sa.Column('color', sa.String(length=20), nullable=False, server_default='yellow'),
         sa.Column('is_pinned', sa.Boolean(), nullable=False, server_default='false'),
         sa.Column('is_checklist', sa.Boolean(), nullable=False, server_default='false'),
+        sa.Column('categories', postgresql.ARRAY(sa.String()), nullable=True, server_default='{}'),
         sa.Column('search_vector', postgresql.TSVECTOR(), nullable=True),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
