@@ -9,6 +9,9 @@ from app.presentation.routers import (
     monitor,
     persons,
     tasks,
+    notes,
+    inbox,
+    mcp,
 )
 
 __all__ = [
@@ -19,4 +22,7 @@ __all__ = [
     "monitor",
     "persons",
     "tasks",
+    "notes",
+    "inbox",
+    "mcp",
 ]

@@ -5,7 +5,7 @@ Clean Architecture implementation with FastAPI
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.presentation.routers import health, auth, calendar, conversation, monitor, persons, tasks, notes, inbox
+from app.presentation.routers import health, auth, calendar, conversation, monitor, persons, tasks, notes, inbox, mcp
 import time
 
 # Initialize FastAPI application
@@ -30,6 +30,23 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+
+# Test mode middleware - reads X-Test-Mode header and sets context
+@app.middleware("http")
+async def test_mode_middleware(request: Request, call_next):
+    """Set test mode from X-Test-Mode header."""
+    from app.core.test_mode_context import set_test_mode
+
+    test_mode_header = request.headers.get("x-test-mode", "0")
+    try:
+        test_mode = int(test_mode_header)
+        if test_mode in (0, 1, 2):
+            set_test_mode(test_mode)
+    except ValueError:
+        pass  # Keep default of 0
+
+    return await call_next(request)
 
 
 # Request monitoring middleware
@@ -116,6 +133,7 @@ app.include_router(persons.router, prefix=settings.API_V1_PREFIX)
 app.include_router(tasks.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(inbox.router, prefix=settings.API_V1_PREFIX)
+app.include_router(mcp.router, prefix=settings.API_V1_PREFIX)
 app.include_router(monitor.router, prefix=settings.API_V1_PREFIX)
 
 

@@ -30,6 +30,7 @@ class MessageSendRequest(BaseModel):
     """Request to send a message."""
     content: str = Field(..., min_length=1, max_length=10000)
     stream: bool = Field(default=False, description="Stream response via SSE")
+    test_mode: int = Field(default=0, ge=0, le=2, description="Test mode: 0=normal, 1=log only, 2=log+confirm")
 
 
 class MessageResponse(BaseModel):
@@ -295,21 +296,44 @@ async def send_message_stream(
 
         async def event_generator():
             """Generate SSE events."""
+            import json
+            import re
             try:
                 async for chunk in use_cases.send_message_stream(
                     conversation_id=conversation_id,
                     user_id=current_user["id"],
                     content=request.content,
+                    test_mode=request.test_mode,
                 ):
-                    # SSE format: data: <content>\n\n
-                    yield f"data: {chunk}\n\n"
+                    # Check if this is a confirmation-required response (test_mode=2)
+                    if "TEST MODE: Bevestiging vereist" in chunk and "Wacht op bevestiging" in chunk:
+                        # Parse the tool details from the chunk
+                        tool_match = re.search(r'Tool: (\w+)', chunk)
+                        params_match = re.search(r'```json\n(.*?)\n```', chunk, re.DOTALL)
+                        route_match = re.search(r'Route: (.+?) →', chunk)
+                        provider_match = re.search(r'→ (\w+)\n', chunk)
+
+                        tool_name = tool_match.group(1) if tool_match else "unknown"
+                        tool_params = {}
+                        if params_match:
+                            try:
+                                tool_params = json.loads(params_match.group(1))
+                            except:
+                                pass
+                        provider = provider_match.group(1) if provider_match else None
+
+                        # Send as confirm_required event
+                        yield f"data: {json.dumps({'type': 'confirm_required', 'content': chunk, 'tool_name': tool_name, 'tool_params': tool_params, 'provider': provider})}\n\n"
+                    else:
+                        # Regular content
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
 
                 # Send completion event
                 yield "data: [DONE]\n\n"
 
             except Exception as e:
                 # Send error event
-                yield f"event: error\ndata: {str(e)}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
         return StreamingResponse(
             event_generator(),

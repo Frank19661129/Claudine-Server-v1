@@ -12,6 +12,8 @@ from uuid import UUID
 from app.core.dependencies import get_db, get_current_user
 from app.application.use_cases.calendar_oauth_use_cases import CalendarOAuthUseCases
 from app.application.use_cases.calendar_event_use_cases import CalendarEventUseCases
+from app.infrastructure.services.token_service_client import token_service_client
+from app.infrastructure.repositories.oauth_token_repository import OAuthTokenRepository
 
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -34,7 +36,7 @@ class OAuthStartResponse(BaseModel):
 class OAuthPollRequest(BaseModel):
     """Request for polling OAuth token."""
     device_code: str
-    set_as_primary: bool = True
+    set_as_primary: bool = False
 
 
 class OAuthPollResponse(BaseModel):
@@ -236,7 +238,7 @@ async def disconnect_provider(
 
     try:
         use_cases = CalendarOAuthUseCases(db)
-        success = use_cases.disconnect_provider(current_user["id"], provider)
+        success = await use_cases.disconnect_provider(current_user["id"], provider)
         return {"success": success, "message": f"{provider} disconnected"}
     except ValueError as e:
         raise HTTPException(
@@ -247,6 +249,38 @@ async def disconnect_provider(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to disconnect {provider}: {str(e)}",
+        )
+
+
+@router.post("/oauth/{provider}/primary")
+async def set_primary_provider(
+    provider: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Set a calendar provider as primary.
+    The primary provider is used when no provider is specified in calendar operations.
+    """
+    if provider not in ["google", "microsoft"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provider must be 'google' or 'microsoft'",
+        )
+
+    try:
+        use_cases = CalendarOAuthUseCases(db)
+        result = use_cases.set_primary_provider(current_user["id"], provider)
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set primary provider: {str(e)}",
         )
 
 
@@ -441,4 +475,93 @@ async def delete_event(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete event: {str(e)}",
+        )
+
+
+# ==================== Token Sync Endpoint ====================
+
+
+@router.post("/oauth/sync-tokens")
+async def sync_tokens_to_service(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Sync existing OAuth tokens to the token-service.
+
+    This is a one-time sync for tokens that were stored before the token-service
+    was integrated. MCP servers need tokens to be in the token-service.
+    """
+    try:
+        token_repo = OAuthTokenRepository(db)
+        tokens = token_repo.get_all_tokens(current_user["id"])
+
+        synced = []
+        for token in tokens:
+            success = await token_service_client.sync_token(
+                user_id=str(current_user["id"]),
+                provider=token.provider,
+                access_token=token.access_token,
+                refresh_token=token.refresh_token,
+                expires_at=token.expires_at,
+                service="calendar",
+            )
+            if success:
+                synced.append(token.provider)
+
+        return {
+            "success": True,
+            "synced_providers": synced,
+            "message": f"Synced {len(synced)} tokens to token-service",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync tokens: {str(e)}",
+        )
+
+
+# ==================== Token Refresh Endpoint (for MCP servers) ====================
+
+
+class TokenRefreshRequest(BaseModel):
+    """Request to refresh a token."""
+    user_id: str
+    provider: str  # google or microsoft
+
+
+@router.post("/oauth/refresh-token")
+async def refresh_token_for_mcp(
+    request: TokenRefreshRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Refresh an OAuth token and sync to token-service.
+
+    This endpoint is called by MCP servers when they get a 401 error.
+    It refreshes the token using the stored refresh_token and syncs
+    the new access_token to the token-service.
+
+    Note: This is an internal endpoint - no user auth required.
+    Should only be accessible from internal Docker network.
+    """
+    try:
+        from uuid import UUID
+        user_uuid = UUID(request.user_id)
+
+        use_cases = CalendarOAuthUseCases(db)
+        new_access_token = await use_cases.refresh_token_if_needed(
+            user_id=user_uuid,
+            provider=request.provider,
+        )
+
+        return {
+            "success": True,
+            "access_token": new_access_token,
+            "provider": request.provider,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh token: {str(e)}",
         )

@@ -18,7 +18,8 @@ class GoogleOAuthService:
     TOKEN_URL = "https://oauth2.googleapis.com/token"
     SCOPES = [
         "https://www.googleapis.com/auth/calendar",
-        "https://www.googleapis.com/auth/calendar.events",
+        # Note: calendar.events is included in calendar scope
+        # Device flow doesn't support calendar.events as separate scope
     ]
 
     def __init__(self):
