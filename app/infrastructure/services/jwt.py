@@ -3,8 +3,9 @@ JWT token service for authentication.
 Part of Infrastructure layer.
 """
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 from uuid import UUID
+import secrets
 from jose import JWTError, jwt
 from app.core.config import settings
 
@@ -69,3 +70,37 @@ def extract_user_id_from_token(token: str) -> Optional[UUID]:
         return UUID(payload.get("sub"))
     except (ValueError, TypeError):
         return None
+
+
+def create_refresh_token() -> Tuple[str, datetime]:
+    """
+    Create a secure refresh token.
+
+    Returns:
+        Tuple of (token_string, expires_at_datetime)
+    """
+    token = secrets.token_urlsafe(64)  # 64 bytes = 512 bits of entropy
+    expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    return token, expires_at
+
+
+def create_token_pair(user_id: UUID, email: str, provider: str) -> dict:
+    """
+    Create both access token and refresh token for a user.
+
+    Args:
+        user_id: User's UUID
+        email: User's email address
+        provider: Authentication provider
+
+    Returns:
+        Dict with access_token, refresh_token, and expires_at
+    """
+    access_token = create_access_token(user_id, email, provider)
+    refresh_token, refresh_expires_at = create_refresh_token()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "refresh_token_expires_at": refresh_expires_at,
+    }

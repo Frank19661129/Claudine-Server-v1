@@ -10,6 +10,8 @@ from app.infrastructure.repositories.user_repository import UserRepository
 from app.application.use_cases.auth_use_cases import (
     RegisterUserUseCase,
     LoginUserUseCase,
+    RefreshTokenUseCase,
+    LogoutUseCase,
     GetCurrentUserUseCase,
 )
 from app.presentation.schemas.auth import (
@@ -17,6 +19,9 @@ from app.presentation.schemas.auth import (
     LoginRequest,
     AuthResponse,
     UserResponse,
+    RefreshRequest,
+    RefreshResponse,
+    LogoutRequest,
 )
 from app.infrastructure.services.jwt import extract_user_id_from_token
 import base64
@@ -28,6 +33,7 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     request: RegisterRequest,
+    db: Session = Depends(get_db),
     user_repo: UserRepository = Depends(get_user_repository),
 ):
     """
@@ -37,9 +43,9 @@ async def register(
     - **password**: At least 8 characters
     - **full_name**: User's full name
 
-    Returns user info and JWT access token.
+    Returns user info, access token, and refresh token.
     """
-    use_case = RegisterUserUseCase(user_repo)
+    use_case = RegisterUserUseCase(user_repo, db)
 
     try:
         result = use_case.execute(
@@ -58,6 +64,7 @@ async def register(
 @router.post("/login", response_model=AuthResponse)
 async def login(
     request: LoginRequest,
+    db: Session = Depends(get_db),
     user_repo: UserRepository = Depends(get_user_repository),
 ):
     """
@@ -66,9 +73,9 @@ async def login(
     - **email**: User's email address
     - **password**: User's password
 
-    Returns user info and JWT access token.
+    Returns user info, access token, and refresh token.
     """
-    use_case = LoginUserUseCase(user_repo)
+    use_case = LoginUserUseCase(user_repo, db)
 
     try:
         result = use_case.execute(
@@ -200,3 +207,45 @@ async def upload_photo(
         is_active=updated_user.is_active,
         photo_url=updated_user.photo_url,
     )
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+async def refresh_token(
+    request: RefreshRequest,
+    db: Session = Depends(get_db),
+    user_repo: UserRepository = Depends(get_user_repository),
+):
+    """
+    Refresh access token using a valid refresh token.
+
+    - **refresh_token**: Valid refresh token from login/register
+
+    Returns new access token and refresh token (token rotation).
+    """
+    use_case = RefreshTokenUseCase(user_repo, db)
+
+    try:
+        result = use_case.execute(refresh_token=request.refresh_token)
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    request: LogoutRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Logout by revoking the refresh token.
+
+    - **refresh_token**: Refresh token to revoke
+
+    Returns 204 No Content on success.
+    """
+    use_case = LogoutUseCase(db)
+    use_case.execute(refresh_token=request.refresh_token)

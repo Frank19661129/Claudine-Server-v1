@@ -4,7 +4,8 @@ Part of Application layer - orchestrates conversation operations.
 """
 from typing import Optional, List, AsyncIterator
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import json
 from sqlalchemy.orm import Session
 
@@ -293,19 +294,53 @@ class ConversationUseCases:
                 from app.infrastructure.repositories.user_settings_repository import UserSettingsRepository
                 from app.core.test_mode_context import get_test_mode
 
-                today = datetime.now().strftime('%Y-%m-%d %H:%M')
+                # Use Amsterdam timezone for correct date parsing
+                tz_nl = ZoneInfo("Europe/Amsterdam")
+                now = datetime.now(tz_nl)
+
+                # Create two-week view for better date parsing
+                days_nl = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag']
+
+                # This week
+                this_week_info = []
+                for i in range(7):
+                    day = now + timedelta(days=i)
+                    day_name = days_nl[day.weekday()]
+                    label = " (VANDAAG)" if i == 0 else " (MORGEN)" if i == 1 else ""
+                    this_week_info.append(f"  - {day_name.capitalize()} {day.strftime('%d-%m-%Y')}{label}")
+
+                # Next week
+                next_week_info = []
+                for i in range(7, 14):
+                    day = now + timedelta(days=i)
+                    day_name = days_nl[day.weekday()]
+                    next_week_info.append(f"  - {day_name.capitalize()} {day.strftime('%d-%m-%Y')}")
+
                 extraction_prompt = f"""Extract calendar event details from this request: "{parsed_command.original_text}"
 
 Return JSON with:
 - title (string, required)
-- start_time (ISO 8601 datetime, required)
-- end_time (ISO 8601 datetime, required)
+- start_time (ISO 8601 datetime WITHOUT timezone suffix, e.g. "2025-12-10T11:00:00")
+- end_time (ISO 8601 datetime WITHOUT timezone suffix, e.g. "2025-12-10T12:00:00")
 - description (string, optional)
 - location (string, optional)
 - provider (string, optional - "google" or "microsoft" if mentioned)
 
-Current date and time context: {today}
-Use this as reference for relative dates like "morgen" (tomorrow), "volgende week" (next week), etc."""
+HUIDIGE DATUM EN TIJD: {days_nl[now.weekday()]} {now.strftime('%d-%m-%Y')} om {now.strftime('%H:%M')}
+
+DEZE WEEK:
+{chr(10).join(this_week_info)}
+
+VOLGENDE WEEK:
+{chr(10).join(next_week_info)}
+
+BELANGRIJKE REGELS:
+1. Als de gebruiker een weekdag noemt ZONDER "volgende week" → gebruik de datum van DEZE WEEK
+2. Als de gebruiker "volgende week [weekdag]" zegt → gebruik de datum van VOLGENDE WEEK
+3. "morgen" = {(now + timedelta(days=1)).strftime('%d-%m-%Y')}
+4. "overmorgen" = {(now + timedelta(days=2)).strftime('%d-%m-%Y')}
+5. Standaard duur voor afspraken: 1 uur
+6. GEEN timezone suffix (+00:00) in de datetime - gebruik alleen YYYY-MM-DDTHH:MM:SS"""
 
                 response = await self.claude_service.send_message(
                     messages=[{"role": "user", "content": extraction_prompt}],
@@ -389,7 +424,6 @@ Use this as reference for relative dates like "morgen" (tomorrow), "volgende wee
             # Reminder is just like calendar but with a simpler message and 5 min duration
             # Routes through MCP Distributor for test mode support
             try:
-                from datetime import timedelta
                 from app.infrastructure.services.mcp_distributor import MCPDistributor, InputSource
                 from app.infrastructure.repositories.user_settings_repository import UserSettingsRepository
                 from app.core.test_mode_context import get_test_mode
@@ -570,9 +604,6 @@ Use this as reference for relative dates like "morgen" (tomorrow), "vanavond" (t
         tools = self.claude_service.get_calendar_tools()
 
         # Add current date/time to system prompt for better date parsing
-        from datetime import datetime, timedelta
-        from zoneinfo import ZoneInfo
-
         # Use Amsterdam/Europe timezone
         tz_nl = ZoneInfo("Europe/Amsterdam")
         now = datetime.now(tz_nl)
@@ -622,6 +653,14 @@ KRITIEKE REGELS VOOR PROVIDER SELECTIE:
         tool_uses = []  # Collect tool uses during streaming
         text_response = ""
 
+        # DEBUG: Log the week view being sent to Claude
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("=== CALENDAR DEBUG ===")
+        logger.info(f"Week view sent to Claude:\n{week_view}")
+        logger.info(f"morgen = {(now + timedelta(days=1)).strftime('%d-%m-%Y')}")
+        logger.info("=== END CALENDAR DEBUG ===")
+
         async for event in self.claude_service.send_message_stream(
             messages=messages,
             system_prompt=enhanced_system_prompt,
@@ -641,6 +680,12 @@ KRITIEKE REGELS VOOR PROVIDER SELECTIE:
             for tool_use in tool_uses:
                 tool_name = tool_use["name"]
                 tool_input = tool_use["input"]
+
+                # DEBUG: Log tool calls
+                logger.info(f"=== TOOL CALL DEBUG ===")
+                logger.info(f"Tool: {tool_name}")
+                logger.info(f"Input: {tool_input}")
+                logger.info(f"=== END TOOL CALL DEBUG ===")
 
                 try:
                     if tool_name == "create_calendar_event":

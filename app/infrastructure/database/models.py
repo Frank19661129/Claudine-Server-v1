@@ -31,6 +31,7 @@ class UserModel(Base):
     # Relationships
     oauth_tokens = relationship("OAuthTokenModel", back_populates="user", cascade="all, delete-orphan")
     settings = relationship("UserSettingsModel", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshTokenModel", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<UserModel(id={self.id}, email={self.email}, provider={self.provider})>"
@@ -302,3 +303,25 @@ class InboxItemModel(Base):
 
     def __repr__(self) -> str:
         return f"<InboxItemModel(id={self.id}, type={self.type}, status={self.status})>"
+
+
+class RefreshTokenModel(Base):
+    """
+    Refresh token database model for JWT token refresh.
+    Maps to the 'refresh_tokens' table in PostgreSQL.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(500), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user = relationship("UserModel", back_populates="refresh_tokens")
+
+    def __repr__(self) -> str:
+        return f"<RefreshTokenModel(id={self.id}, user_id={self.user_id}, revoked={self.revoked})>"

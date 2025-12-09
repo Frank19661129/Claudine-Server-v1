@@ -36,4 +36,25 @@ class AuthResponse(BaseModel):
 
     user: UserResponse
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    """Request schema for token refresh."""
+
+    refresh_token: str
+
+
+class RefreshResponse(BaseModel):
+    """Response schema for token refresh."""
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class LogoutRequest(BaseModel):
+    """Request schema for logout."""
+
+    refresh_token: str
