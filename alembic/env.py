@@ -1,5 +1,5 @@
 """
-Alembic environment configuration for Claudine Server v1.
+Alembic environment configuration for PAI Server v1.
 Handles database migrations.
 """
 from logging.config import fileConfig

@@ -1,4 +1,4 @@
-# Claudine Server v1 - Python Dependencies
+# PAI Server (Pepper) - Python Dependencies
 # Clean Architecture rebuild with FastAPI
 
 # Web Framework
@@ -27,6 +27,9 @@ msal==1.26.0
 
 # HTTP Client
 httpx==0.26.0
+
+# Email
+sendgrid==6.11.0
 
 # Utilities
 python-dateutil==2.8.2

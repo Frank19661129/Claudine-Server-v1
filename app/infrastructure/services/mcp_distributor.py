@@ -112,10 +112,10 @@ class MCPDistributor:
     """
 
     # External MCP Server endpoints
-    # Using Docker container names on claudine-mcp-network
+    # Using Docker container names on pai-mcp-network
     MCP_SERVERS = {
-        MCPProvider.GOOGLE: "http://claudine-claudine-google-office-1:8002",
-        MCPProvider.MICROSOFT: "http://claudine-claudine-microsoft-office-1:8001",
+        MCPProvider.GOOGLE: "http://pai-pai-google-office-1:8002",
+        MCPProvider.MICROSOFT: "http://pai-pai-microsoft-office-1:8001",
     }
 
     # Internal providers don't need URLs - they use direct handlers

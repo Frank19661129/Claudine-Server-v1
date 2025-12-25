@@ -1,4 +1,4 @@
-# Claudine Server v1 - Dockerfile
+# PAI Server (Pepper) - Dockerfile
 # Multi-stage build for optimized production image
 
 # Stage 1: Builder

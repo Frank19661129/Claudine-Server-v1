@@ -2,7 +2,7 @@
 Internal MCP Handler - Handles MCP calls for internal features.
 
 Routes MCP tool calls to internal use cases (tasks, notes, inbox, persons).
-These are local features stored in the Claudine database.
+These are local features stored in the PAI database.
 """
 import logging
 from typing import Dict, Any, Optional, List

@@ -1,35 +1,58 @@
 services:
-  claudine-server:
-    container_name: claudine-server
+  pai-server:
+    container_name: pai-server
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8003:8000"  # Main server port (external:internal)
+      - "8003:8000"
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://claudine:claudine_dev_password@claudine-postgres:5432/claudine
+      - DATABASE_URL=postgresql://pai:pai_dev_password@pai-postgres:5432/pai
       - DEBUG=true
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
     volumes:
-      - ./app:/app/app  # Mount app directory for development hot-reload
+      - ./app:/app/app
     restart: unless-stopped
+    depends_on:
+      pai-postgres:
+        condition: service_healthy
     networks:
-      - postgres_network
-      - mcp_network
+      - pai-network
+      - pai-mcp-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  pai-postgres:
+    image: postgres:15-alpine
+    container_name: pai-postgres
+    environment:
+      POSTGRES_USER: pai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pai_dev_password}
+      POSTGRES_DB: pai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pai-postgres-data:/var/lib/postgresql/data
+    networks:
+      - pai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
-  postgres_network:
-    name: server-v0_claudine_network
+  pai-network:
+    driver: bridge
+  pai-mcp-network:
     external: true
-  mcp_network:
-    name: claudine_claudine-mcp-network
-    external: true
+    name: pai_pai-mcp-network
 
-# Notes:
-# - Uses existing claudine-postgres container from server-v0
-# - Creates claudine_v1 database if it doesn't exist
-# - Port 8003 for main server
-# - Hot-reload enabled via volume mount for development
-# - Connected to MCP network for communication with MCP servers
+volumes:
+  pai-postgres-data:
+    driver: local

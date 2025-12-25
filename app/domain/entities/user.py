@@ -24,6 +24,20 @@ class User:
     updated_at: datetime
     hashed_password: Optional[str] = None
     photo_url: Optional[str] = None
+    # Onboarding fields
+    email_verified: bool = False
+    email_verification_code: Optional[str] = None
+    email_verification_expires: Optional[datetime] = None
+    phone_number: Optional[str] = None
+    phone_verified: bool = False
+    phone_verification_code: Optional[str] = None
+    phone_verification_expires: Optional[datetime] = None
+    inbox_prefix: Optional[str] = None
+    inbox_token: Optional[str] = None
+    inbox_verified: bool = False
+    inbox_verification_token: Optional[str] = None
+    inbox_verification_expires: Optional[datetime] = None
+    onboarding_completed: bool = False
 
     @classmethod
     def create(
@@ -90,3 +104,10 @@ class User:
     def is_local_user(self) -> bool:
         """Check if user uses local authentication."""
         return self.provider == "local"
+
+    @property
+    def inbox_email(self) -> Optional[str]:
+        """Get full PAI inbox email address."""
+        if self.inbox_prefix:
+            return f"{self.inbox_prefix}@inbox.pai-ai.com"
+        return None

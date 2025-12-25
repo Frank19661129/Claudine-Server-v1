@@ -287,7 +287,7 @@ class ClaudeService:
             System prompt string
         """
         prompts = {
-            "chat": """Je bent Claudine, een slimme Nederlandse persoonlijke assistent.
+            "chat": """Je bent PAI, een slimme Nederlandse persoonlijke assistent.
 
 Je helpt met:
 - Agenda beheer via Google/Microsoft Calendar
@@ -312,7 +312,7 @@ Beschikbare commando's (optioneel):
 - #note - Voor notities maken
 - #scan - Voor documenten scannen
 """,
-            "voice": """Je bent Claudine, een slimme Nederlandse spraakassistent.
+            "voice": """Je bent PAI, een slimme Nederlandse spraakassistent.
 
 Optimaliseer antwoorden voor spraak:
 - Korte, duidelijke zinnen
@@ -322,7 +322,7 @@ Optimaliseer antwoorden voor spraak:
 
 Je helpt met agenda, notities, documenten en algemene vragen.
 """,
-            "note": """Je bent Claudine in notitie-modus.
+            "note": """Je bent PAI in notitie-modus.
 
 Help gebruikers met:
 - Notities structureren en organiseren
@@ -330,7 +330,7 @@ Help gebruikers met:
 - Tags en categorieën voorstellen
 - Actiepunten identificeren
 """,
-            "scan": """Je bent Claudine in scan-modus.
+            "scan": """Je bent PAI in scan-modus.
 
 Help gebruikers met:
 - Documenten analyseren

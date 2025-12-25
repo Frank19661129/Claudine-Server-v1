@@ -163,4 +163,18 @@ class UserRepository:
             is_active=db_user.is_active,
             created_at=db_user.created_at,
             updated_at=db_user.updated_at,
+            # Onboarding fields
+            email_verified=db_user.email_verified,
+            email_verification_code=db_user.email_verification_code,
+            email_verification_expires=db_user.email_verification_expires,
+            phone_number=db_user.phone_number,
+            phone_verified=db_user.phone_verified,
+            phone_verification_code=db_user.phone_verification_code,
+            phone_verification_expires=db_user.phone_verification_expires,
+            inbox_prefix=db_user.inbox_prefix,
+            inbox_token=db_user.inbox_token,
+            inbox_verified=db_user.inbox_verified,
+            inbox_verification_token=db_user.inbox_verification_token,
+            inbox_verification_expires=db_user.inbox_verification_expires,
+            onboarding_completed=db_user.onboarding_completed,
         )

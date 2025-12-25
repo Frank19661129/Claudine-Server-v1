@@ -133,7 +133,7 @@ class InboxUseCases:
             return None
 
         # Build prompt for Claude
-        system_prompt = """Je bent Claudine, een Nederlandse persoonlijke assistent.
+        system_prompt = """Je bent PAI, een Nederlandse persoonlijke assistent.
 Je helpt met het verwerken van inbox items door suggesties te doen.
 
 Analyseer het inbox item en bepaal de beste actie:

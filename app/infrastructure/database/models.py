@@ -28,10 +28,40 @@ class UserModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    # Email verification
+    email_verified = Column(Boolean, default=False, nullable=False)
+    email_verification_code = Column(String(6), nullable=True)
+    email_verification_expires = Column(DateTime, nullable=True)
+
+    # Phone verification
+    phone_number = Column(String(20), nullable=True)
+    phone_verified = Column(Boolean, default=False, nullable=False)
+    phone_verification_code = Column(String(6), nullable=True)
+    phone_verification_expires = Column(DateTime, nullable=True)
+
+    # PAI inbox address (prefix-token@inbox.pai-ai.com)
+    inbox_prefix = Column(String(64), nullable=True)
+    inbox_token = Column(String(6), nullable=True)
+
+    # Inbox verification
+    inbox_verified = Column(Boolean, default=False, nullable=False)
+    inbox_verification_token = Column(String(64), nullable=True)
+    inbox_verification_expires = Column(DateTime, nullable=True)
+
+    # Onboarding status
+    onboarding_completed = Column(Boolean, default=False, nullable=False)
+
     # Relationships
     oauth_tokens = relationship("OAuthTokenModel", back_populates="user", cascade="all, delete-orphan")
     settings = relationship("UserSettingsModel", back_populates="user", uselist=False, cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshTokenModel", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def inbox_email(self) -> str | None:
+        """Get full PAI inbox email address."""
+        if self.inbox_prefix:
+            return f"{self.inbox_prefix}@inbox.pai-ai.com"
+        return None
 
     def __repr__(self) -> str:
         return f"<UserModel(id={self.id}, email={self.email}, provider={self.provider})>"
